@@ -11,6 +11,7 @@ import ProductAccordion from '@/components/product/product-accordion'
 import { ProductViewTracker } from '@/components/product/product-view-tracker'
 import { getProductPlaceholder } from '@/lib/utils/placeholder-images'
 import { type VariantExtension } from '@/components/product/product-price'
+import { ReviewsWidget } from '@/components/modules/reviews/ReviewsWidget'
 
 async function getProduct(handle: string) {
   try {
@@ -201,6 +202,16 @@ export default async function ProductPage({
               description={product.description}
               details={product.metadata as Record<string, string> | undefined}
             />
+          </div>
+        </div>
+      </div>
+
+      {/* Customer Reviews */}
+      <div className="border-t">
+        <div className="container-custom py-12">
+          <h2 className="text-h3 font-heading font-semibold mb-8">Customer Reviews</h2>
+          <div className="max-w-2xl">
+            <ReviewsWidget productId={product.id} />
           </div>
         </div>
       </div>
