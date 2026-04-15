@@ -2,7 +2,80 @@
 
 import { useState } from 'react'
 import { Star } from 'lucide-react'
-import { useReviews, useCreateReview } from '@amboras-test-az/reviews'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || 'http://localhost:9000'
+const PUB_KEY = process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY || ''
+const STORE_ID = process.env.NEXT_PUBLIC_STORE_ID || ''
+
+interface Review {
+  id: string
+  product_id: string
+  rating: number
+  title: string
+  content?: string
+  status: string
+  created_at: string
+}
+
+interface ReviewsResponse {
+  reviews: Review[]
+  total: number
+  averageRating: number
+}
+
+function getHeaders() {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-publishable-api-key': PUB_KEY,
+  }
+  if (STORE_ID) headers['X-Store-Environment-ID'] = STORE_ID
+  return headers
+}
+
+function useReviews(productId: string, page: number, perPage: number) {
+  return useQuery<ReviewsResponse>({
+    queryKey: ['reviews', productId, page, perPage],
+    queryFn: async () => {
+      const offset = (page - 1) * perPage
+      const res = await fetch(
+        `${BACKEND_URL}/store/reviews?product_id=${productId}&limit=${perPage}&offset=${offset}`,
+        { headers: getHeaders() },
+      )
+      if (!res.ok) throw new Error('Failed to fetch reviews')
+      return res.json()
+    },
+    staleTime: 60_000,
+  })
+}
+
+function useCreateReview() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: {
+      productId: string
+      rating: number
+      title: string
+      content: string
+    }) => {
+      const res = await fetch(`${BACKEND_URL}/store/reviews`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          product_id: payload.productId,
+          rating: payload.rating,
+          title: payload.title,
+          content: payload.content,
+        }),
+      })
+      if (!res.ok) throw new Error('Failed to submit review')
+      return res.json()
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['reviews', variables.productId] })
+    },
+  })
+}
 
 interface ReviewsWidgetProps {
   productId: string
@@ -12,7 +85,7 @@ export function ReviewsWidget({ productId }: ReviewsWidgetProps) {
   const [page, setPage] = useState(1)
   const perPage = 5
 
-  const { data, isLoading } = useReviews(productId, { page, perPage })
+  const { data, isLoading } = useReviews(productId, page, perPage)
   const { mutate: createReview, isPending, isSuccess } = useCreateReview()
 
   const [title, setTitle] = useState('')
@@ -75,7 +148,9 @@ export function ReviewsWidget({ productId }: ReviewsWidgetProps) {
                   <span className="text-sm font-medium">{review.title}</span>
                 )}
               </div>
-              {review.content && <p className="text-sm text-gray-700">{review.content}</p>}
+              {review.content && (
+                <p className="text-sm text-gray-700">{review.content}</p>
+              )}
             </div>
           ))}
 
@@ -149,7 +224,8 @@ export function ReviewsWidget({ productId }: ReviewsWidgetProps) {
 
             <div>
               <label className="block text-sm font-medium mb-1">
-                Review <span className="text-gray-400 font-normal">(optional)</span>
+                Review{' '}
+                <span className="text-gray-400 font-normal">(optional)</span>
               </label>
               <textarea
                 className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
@@ -181,7 +257,9 @@ function StarRow({ rating }: { rating: number }) {
         <Star
           key={n}
           className={`w-4 h-4 ${
-            n <= Math.round(rating) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'
+            n <= Math.round(rating)
+              ? 'fill-yellow-400 text-yellow-400'
+              : 'text-gray-200'
           }`}
         />
       ))}
